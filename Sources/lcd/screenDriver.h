@@ -35,7 +35,7 @@ extern vec3 cameraPos;
 extern triangle triangles[maxTriangles];
 
 void projectTriangle(const uint32_t idx);
-void renderTriangle(const uint32_t idx);
+void renderTriangles();
 void addTriangle(const triangle t);
 
 #endif /* SOURCES_SCREENDRIVER_H_ */

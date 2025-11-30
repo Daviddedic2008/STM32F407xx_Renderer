@@ -73,6 +73,21 @@ typedef struct{
 uint32_t trianglesDefined = 0;
 triangle triangles[maxTriangles];
 triangle2 trianglesProjected[maxTriangles]; // more ram used, but dont recalc values unless triangle is moving
+uint8_t curTile = 0; // 4 tile system
+
+__attribute__((section(".tileBufs")))
+volatile uint16_t colorTileBuf[120][120];
+__attribute__((section(".tileBufs")))
+volatile float zTileBuf[120][120];
+
+static inline void resetBufs(){
+	for(uint16_t x = 0; x < 120; x++){
+		for(uint16_t y = 0; y < 120; y++){
+			colorTileBuf[x][y] = backdrop;
+			zTileBuf[x][y] = 3e30f;
+		}
+	}
+}
 
 void addTriangle(const triangle t){
 	triangles[trianglesDefined] = t;
@@ -235,48 +250,78 @@ void projectTriangle(const uint32_t idx){
 	trianglesProjected[idx] = ret;
 }
 
-void renderTriangle(const uint32_t idx){
+static inline void renderTriangle(const uint32_t idx){
 
 	// compiler prob optimizes fine just gotta make sure, otherwise this makes no sense
 	register triangle2 t = trianglesProjected[idx];
+
+	const uint16_t lox = (curTile % 2) ? 120 : 0;
+	const uint16_t hix = (curTile % 2) ? 239 : 119;
+	const uint16_t loy = (curTile < 2) ? 0 : 120;
+	const uint16_t hiy = (curTile < 2) ? 120 : 240;
+
+	uint16_t maxx = (uint16_t)(t.max.x);
+	if(maxx < lox){return;}
+	maxx = (maxx > hix) ? hix : maxx;
+	uint16_t maxy = (uint16_t)(t.max.y);
+	if(maxy < loy){return;}
+	maxy = (maxy > hiy) ? hiy : maxy;
+	uint16_t minx = (uint16_t)(t.min.x);
+	if(minx > hix){return;}
+	minx = (minx < lox) ? lox : minx;
+	uint16_t miny = (uint16_t)(t.min.y);
+	if(miny > hiy){return;}
+	miny = (miny < loy) ? loy : miny;
+
+	t.min.x = minx; t.min.y = miny;
+
 	WRITE_LCD_BUS(0x2a, COMMAND);
-	WRITE_LCD_BUS((uint16_t)t.min.x >> 8, DATA);
-	WRITE_LCD_BUS((uint16_t)t.min.x & 0xFF, DATA);
-	WRITE_LCD_BUS((uint16_t)t.max.x >> 8, DATA);
-	WRITE_LCD_BUS((uint16_t)t.max.x & 0xFF, DATA);
+	WRITE_LCD_BUS(minx >> 8, DATA);
+	WRITE_LCD_BUS(minx & 0xFF, DATA);
+	WRITE_LCD_BUS(maxx >> 8, DATA);
+	WRITE_LCD_BUS(maxx & 0xFF, DATA);
 
 	WRITE_LCD_BUS(0x2b, COMMAND);
-	WRITE_LCD_BUS((uint16_t)t.min.y >> 8, DATA);
-	WRITE_LCD_BUS((uint16_t)t.min.y & 0xFF, DATA);
-	WRITE_LCD_BUS((uint16_t)t.max.y >> 8, DATA);
-	WRITE_LCD_BUS((uint16_t)t.max.y & 0xFF, DATA);
-
+	WRITE_LCD_BUS(miny >> 8, DATA);
+	WRITE_LCD_BUS(miny & 0xFF, DATA);
+	WRITE_LCD_BUS(maxy >> 8, DATA);
+	WRITE_LCD_BUS(maxy & 0xFF, DATA);
 	WRITE_LCD_BUS(0x2c, COMMAND);
+
 	vec2 initialUV = barycentricInterpolCorner(t);
 	// da(x) y2_y3
 	// db(x) y3_y1
 	// da(y) x3_x2
 	// db(y) x1_x3
-	const uint16_t maxx = (uint16_t)(t.max.x);
-	const uint16_t maxy = (uint16_t)(t.max.y);
-	const uint16_t minx = (uint16_t)(t.min.x);
-	const uint16_t miny = (uint16_t)(t.min.y);
 	for(uint32_t y = miny; y <= maxy; y++){
 		float alpha = initialUV.x;
 		float beta = initialUV.y;
 		for(uint32_t x = minx; x <= maxx; x++){
 			float gamma = 1.0f - alpha - beta; // last barycentric coord
-			if(alpha <= -0.01f || beta <= -0.01f || gamma <= -0.01f){
-				// outside
-				WRITE_LCD_BUS(backdrop >> 8, DATA); WRITE_LCD_BUS(backdrop & 0xFF, DATA);
+			if(alpha > -0.01f && beta > -0.01f && gamma > -0.01f){
+				// inside
+				const float tmpz = alpha * triangles[idx].p1.z + beta * triangles[idx].p2.z + gamma * triangles[idx].p3.z;
+
+				if(tmpz < zTileBuf[x-lox][y-loy]){
+					colorTileBuf[x-lox][y-loy] = triangles[idx].color;
+					zTileBuf[x-lox][y-loy] = tmpz;
+				}
 			}
-			else{
-				WRITE_LCD_BUS(triangles[idx].color >> 8, DATA); WRITE_LCD_BUS(triangles[idx].color & 0xFF, DATA);
-			}
+
+			WRITE_LCD_BUS(colorTileBuf[x-lox][y-loy] >> 8, DATA); WRITE_LCD_BUS(colorTileBuf[x-lox][y-loy] & 0xFF, DATA);
 			alpha += t.y2_y3;
 			beta += t.y3_y1;
 		}
 		initialUV.x += t.x3_x2;
 		initialUV.y += t.x1_x3;
+	}
+}
+
+void renderTriangles(){
+	for(curTile = 0; curTile < 4; curTile++){
+		resetBufs();
+		for(uint32_t t = 0; t < trianglesDefined; t++){
+			renderTriangle(t);
+		}
 	}
 }

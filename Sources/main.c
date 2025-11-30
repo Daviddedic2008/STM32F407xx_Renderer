@@ -33,13 +33,13 @@ int main(void)
 	clearLCD();
 	triangle t;
 	t.p1 = (vec3){0.0f, 0.0f, 1.0f};
-	t.p2 = (vec3){0.0f, 100.0f, 1.0f};
-	t.p3 = (vec3){100.0f, 0.0f, 1.0f};
+	t.p2 = (vec3){0.0f, 200.0f, 1.0f};
+	t.p3 = (vec3){200.0f, 0.0f, 1.0f};
 	addTriangle(t);
 	projectTriangle(0);
-	while(1){
 	triangles[0].color = 0xFF;
-	renderTriangle(0);
+	renderTriangles();
+	while(1){
 	}
 	for(;;);
 }
