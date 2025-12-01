@@ -30,14 +30,19 @@ int main(void)
 	SystemInit();
 	pinout();
 	LCD_INIT();
+	//changeBackdrop(0xf000);
 	clearLCD();
+	//changeBackdrop(0x0);
 	triangle t;
-	t.p1 = (vec3){0.0f, 0.0f, 1.0f};
-	t.p2 = (vec3){0.0f, 200.0f, 1.0f};
-	t.p3 = (vec3){200.0f, 0.0f, 1.0f};
+	t.p1 = (vec3){-10.0f, -10.0f, 10.0f};
+	t.p2 = (vec3){-10.0f, 200.0f, 1.0f};
+	t.p3 = (vec3){200.0f, -10.0f, 1.0f};
 	addTriangle(t);
+	//addTriangle(t);
 	projectTriangle(0);
+	//projectTriangle(1);
 	triangles[0].color = 0xFF;
+	//triangles[1].color = 0x00FF;
 	renderTriangles();
 	while(1){
 	}

@@ -234,7 +234,7 @@ static inline vec2 projectPoint(const vec3 p){
 	// assume camera rotation is 0, 0, 1. doing anything else would be REALLY slow computationally
 	vec3 v = subVec3(p, cameraPos);
 	float invz = 1.0f / v.z;
-	return (vec2){cameraPos.x + v.x * invz * fov, cameraPos.y + v.y * invz * fov};
+	return (vec2){120 + v.x * invz * fov, 120 + v.y * invz * fov};
 }
 
 void projectTriangle(const uint32_t idx){

@@ -18,7 +18,7 @@ void changeBackdrop(const uint16_t c);
 extern uint8_t underline;
 extern char screenBuf[30][40];
 
-#define maxTriangles 1
+#define maxTriangles 2
 #define fov 1.0f
 
 typedef struct{
