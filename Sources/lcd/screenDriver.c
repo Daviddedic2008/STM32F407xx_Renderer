@@ -12,7 +12,8 @@ unsigned char row = 0; unsigned char col = 0; unsigned char pr = 0; unsigned cha
 #define dot3(v1, v2) (v1.x * v2.x + v1.y * v2.y + v1.z * v2.z)
 #define solveMatrix2(v1, v2, v3, v4) (v1 * v4 - v2 * v3)
 
-vec3 cameraPos = (vec3){120.0f, 160.0f, 0.0f};
+vec3 cameraPos = (vec3){0.0f, 0.0f, 0.0f};
+vec3 lightDir = (vec3){0.0f, 0.0f, -1.0f};
 
 vec3 cross(const vec3 v1, const vec3 v2){
 	const vec3 ret = {solveMatrix2(v1.y, v1.z, v2.y, v2.z), -1.0f * solveMatrix2(v1.x, v1.z, v2.x, v2.z), solveMatrix2(v1.x, v1.y, v2.x, v2.y)};
@@ -26,7 +27,7 @@ vec3 cross(const vec3 v1, const vec3 v2){
 
 // 1 is NOT enough, but it all depends how the lcd is feeling
 // 2 is NOT enough for deterministic screen shenanigans :).
-// 3 is BARELY enough, the clock speed and wr lock time barely lign up, slight artifacting
+// 3 is BARELY enough, the clock speed and wr lock time barely line up, slight artifacting
 // 4 is def enough but just use 3 its fine
 #define PULSE_DELAY() __asm__("nop") // guarantee 15ns pulse time to lock write signal(2 may be enough idk?)
 
@@ -75,22 +76,23 @@ triangle triangles[maxTriangles];
 triangle2 trianglesProjected[maxTriangles]; // more ram used, but dont recalc values unless triangle is moving
 uint8_t curTile = 0; // 4 tile system
 
-__attribute__((section(".tileBufs")))
-volatile uint16_t colorTileBuf[120][120];
-__attribute__((section(".tileBufs")))
-volatile float zTileBuf[120][120];
+
+uint16_t colorTileBuf[120*120];
+
+float zTileBuf[120*120];
+
+#define tileBufIdx(x, y) ((x) + (y) * 120)
 
 static inline void resetBufs(){
-	for(uint16_t x = 0; x < 120; x++){
-		for(uint16_t y = 0; y < 120; y++){
-			colorTileBuf[x][y] = backdrop;
-			zTileBuf[x][y] = 3e30f;
-		}
+	for(uint16_t x = 0; x < 120*120; x++){
+		zTileBuf[x] = 3e30f;
+		colorTileBuf[x] = backdrop;
 	}
 }
 
 void addTriangle(const triangle t){
 	triangles[trianglesDefined] = t;
+	projectTriangle(trianglesDefined);
 	trianglesDefined++;
 }
 
@@ -198,6 +200,27 @@ void clearLCD(){
 	WRITE_LCD_BUS(0x2b, COMMAND);
 	WRITE_LCD_BUS(0, DATA);
 	WRITE_LCD_BUS(0, DATA);
+	WRITE_LCD_BUS(0, DATA);
+	WRITE_LCD_BUS(240, DATA);
+
+	WRITE_LCD_BUS(0x2c, COMMAND);
+	for(unsigned int x = 0; x < 320; x++){
+		for(unsigned char y = 0; y < 240; y++){
+			WRITE_LCD_BUS(backdrop >> 8, DATA); WRITE_LCD_BUS(backdrop & 0xFF, DATA);
+		}
+	}
+}
+
+void clearLCD_FULL(){
+	WRITE_LCD_BUS(0x2a, COMMAND);
+	WRITE_LCD_BUS(0, DATA);
+	WRITE_LCD_BUS(0, DATA);
+	WRITE_LCD_BUS(0, DATA);
+	WRITE_LCD_BUS(240, DATA);
+
+	WRITE_LCD_BUS(0x2b, COMMAND);
+	WRITE_LCD_BUS(0, DATA);
+	WRITE_LCD_BUS(0, DATA);
 	WRITE_LCD_BUS(1, DATA);
 	WRITE_LCD_BUS(64, DATA);
 
@@ -209,12 +232,11 @@ void clearLCD(){
 	}
 }
 
-static inline vec2 barycentricInterpolCorner(const triangle2 t){
+static inline vec2 barycentricInterpolCorner(triangle2 t){
 	// this is cursed
-	vec2 p = t.min;
-	p.x -= t.p3.x;
-	p.y -= t.p3.y;
-	return (vec2){(t.y2_y3 * p.x + t.x3_x2 * p.y), (t.y3_y1 * p.x + t.x1_x3 * p.y)};
+	t.min.x -= t.p3.x;
+	t.min.y -= t.p3.y;
+	return (vec2){(t.y2_y3 * t.min.x + t.x3_x2 * t.min.y), (t.y3_y1 * t.min.x + t.x1_x3 * t.min.y)};
 }
 
 static inline float invsqrt(float f){
@@ -224,10 +246,14 @@ static inline float invsqrt(float f){
 	return f;
 }
 
-static inline vec3 normalize(vec3 v){
+vec3 normalize(vec3 v){
 	const float sq = invsqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 	v.x = v.x * sq; v.y = v.y * sq; v.z = v.z * sq;
 	return v;
+}
+
+static inline float magnitude(vec3 v){
+	return 1.0f/invsqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
 static inline vec2 projectPoint(const vec3 p){
@@ -250,26 +276,48 @@ void projectTriangle(const uint32_t idx){
 	trianglesProjected[idx] = ret;
 }
 
+static inline uint16_t scaleColor(uint16_t clr, const float scl){
+	uint16_t b = clr & 0b11111; // b
+	uint16_t g = (clr & 0b11111100000) >> 5; // g
+	uint16_t r = (clr & 0b1111100000000000) >> 11; // r
+	b *= scl; g *= scl; r *= scl;
+	return b + (g << 5) + (r << 11);
+}
+
+void computeNormal(const uint32_t idx){
+	const vec3* vecs = (vec3*)&triangles[idx];
+	triangles[idx].normal = normalize(cross((vec3){vecs[0].x - vecs[1].x, vecs[0].y - vecs[1].y, vecs[0].z - vecs[1].z}, (vec3){vecs[0].x - vecs[2].x, vecs[0].y - vecs[2].y, vecs[0].z - vecs[2].z}));
+}
+
+static inline float flatShade(const uint32_t idx){
+	float dt = dot3(triangles[idx].normal, lightDir);
+	dt *= (dt < 0.0f) ? -1.0f : 1.0f;
+	const float trueBright = ambient + dt;
+	return trueBright > 1.0f ? 1.0f : trueBright;
+}
+
 static inline void renderTriangle(const uint32_t idx){
 
 	// compiler prob optimizes fine just gotta make sure, otherwise this makes no sense
 	register triangle2 t = trianglesProjected[idx];
+
+	const float lightCoef = flatShade(idx);
 
 	const uint16_t lox = (curTile % 2) ? 120 : 0;
 	const uint16_t hix = (curTile % 2) ? 239 : 119;
 	const uint16_t loy = (curTile < 2) ? 0 : 120;
 	const uint16_t hiy = (curTile < 2) ? 120 : 240;
 
-	uint16_t maxx = (uint16_t)(t.max.x);
+	int16_t maxx = (int16_t)(t.max.x);
 	if(maxx < lox){return;}
 	maxx = (maxx > hix) ? hix : maxx;
-	uint16_t maxy = (uint16_t)(t.max.y);
+	int16_t maxy = (int16_t)(t.max.y);
 	if(maxy < loy){return;}
 	maxy = (maxy > hiy) ? hiy : maxy;
-	uint16_t minx = (uint16_t)(t.min.x);
+	int16_t minx = (int16_t)(t.min.x);
 	if(minx > hix){return;}
 	minx = (minx < lox) ? lox : minx;
-	uint16_t miny = (uint16_t)(t.min.y);
+	int16_t miny = (int16_t)(t.min.y);
 	if(miny > hiy){return;}
 	miny = (miny < loy) ? loy : miny;
 
@@ -298,17 +346,18 @@ static inline void renderTriangle(const uint32_t idx){
 		float beta = initialUV.y;
 		for(uint32_t x = minx; x <= maxx; x++){
 			float gamma = 1.0f - alpha - beta; // last barycentric coord
+			const uint16_t tidx = tileBufIdx(x - lox, y-loy);
 			if(alpha > -0.01f && beta > -0.01f && gamma > -0.01f){
 				// inside
 				const float tmpz = alpha * triangles[idx].p1.z + beta * triangles[idx].p2.z + gamma * triangles[idx].p3.z;
 
-				if(tmpz < zTileBuf[x-lox][y-loy]){
-					colorTileBuf[x-lox][y-loy] = triangles[idx].color;
-					zTileBuf[x-lox][y-loy] = tmpz;
+				if(tmpz <= zTileBuf[tidx]){
+					colorTileBuf[tidx] = scaleColor(triangles[idx].color, lightCoef);
+					zTileBuf[tidx] = tmpz;
 				}
 			}
 
-			WRITE_LCD_BUS(colorTileBuf[x-lox][y-loy] >> 8, DATA); WRITE_LCD_BUS(colorTileBuf[x-lox][y-loy] & 0xFF, DATA);
+			WRITE_LCD_BUS(colorTileBuf[tidx] >> 8, DATA); WRITE_LCD_BUS(colorTileBuf[tidx] & 0xFF, DATA);
 			alpha += t.y2_y3;
 			beta += t.y3_y1;
 		}
@@ -323,5 +372,11 @@ void renderTriangles(){
 		for(uint32_t t = 0; t < trianglesDefined; t++){
 			renderTriangle(t);
 		}
+	}
+}
+
+void projectAllTriangles(){
+	for(uint32_t t = 0; t < trianglesDefined; t++){
+		projectTriangle(t);
 	}
 }

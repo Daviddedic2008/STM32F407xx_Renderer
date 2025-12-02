@@ -46,18 +46,14 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 MEMORY
 {
   CCMRAM    (xrw)    : ORIGIN = 0x10000000,   LENGTH = 64K
-  RAM    (xrw)    : ORIGIN = 0x20000000 + 87000,   LENGTH = 128K - 87K
-  TILEBUF (rw) : ORIGIN = 0x20000000, LENGTH = 87K
+  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 128K
   FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 1024K
 }
 
 /* Sections */
 SECTIONS
 {
-  .tileBufs : 
-  {
-  	*(.tileBufs)
-  } > TILEBUF
+
   /* The startup code into "FLASH" Rom type memory */
   .isr_vector :
   {

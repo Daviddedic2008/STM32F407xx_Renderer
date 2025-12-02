@@ -23,6 +23,7 @@
 #endif
 #include "lcd/screenDriver.h"
 #include "general/mcuHeader.h"
+#include "lcd/model.h"
 
 int main(void)
 {
@@ -30,21 +31,30 @@ int main(void)
 	SystemInit();
 	pinout();
 	LCD_INIT();
+	changeBackdrop(0xFFFF);
+	clearLCD_FULL();
+	changeBackdrop(0x0000);
 	//changeBackdrop(0xf000);
-	clearLCD();
 	//changeBackdrop(0x0);
-	triangle t;
-	t.p1 = (vec3){-10.0f, -10.0f, 10.0f};
-	t.p2 = (vec3){-10.0f, 200.0f, 1.0f};
-	t.p3 = (vec3){200.0f, -10.0f, 1.0f};
-	addTriangle(t);
+	//triangle t;
+	//t.p1 = (vec3){-10.0f, -10.0f, 10.0f};
+	//t.p2 = (vec3){-10.0f, 200.0f, 1.0f};
+	//t.p3 = (vec3){200.0f, -10.0f, 1.0f};
 	//addTriangle(t);
-	projectTriangle(0);
+	//addTriangle(t);
 	//projectTriangle(1);
-	triangles[0].color = 0xFF;
+	//triangles[0].color = 0xFF;
 	//triangles[1].color = 0x00FF;
-	renderTriangles();
+	loadCube(0xF800);     // red cube
+	loadPyramid(0x07E0);  // green pyramid
+	loadColumn(0x001F);   // blue column
+
 	while(1){
+		clearLCD();
+		renderTriangles();
+		projectAllTriangles();
+		delay_ms(50);
+		cameraPos.z += 10.0f;
 	}
 	for(;;);
 }

@@ -24,7 +24,7 @@
 
 .syntax unified
 .cpu cortex-m4
-.fpu softvfp
+.fpu fpv4-sp-d16 // using cortex m4f, so i have access to an fpu
 .thumb
 
 .global g_pfnVectors
