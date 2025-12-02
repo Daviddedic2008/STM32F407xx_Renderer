@@ -48,13 +48,13 @@ int main(void)
 	loadCube(0xF800);     // red cube
 	loadPyramid(0x07E0);  // green pyramid
 	loadColumn(0x001F);   // blue column
+	setLightPos(0.0f, 0.0f, -10.0f);
 
 	while(1){
 		clearLCD();
 		renderTriangles();
 		projectAllTriangles();
 		delay_ms(50);
-		cameraPos.z += 10.0f;
 	}
 	for(;;);
 }

@@ -13,7 +13,14 @@ unsigned char row = 0; unsigned char col = 0; unsigned char pr = 0; unsigned cha
 #define solveMatrix2(v1, v2, v3, v4) (v1 * v4 - v2 * v3)
 
 vec3 cameraPos = (vec3){0.0f, 0.0f, 0.0f};
-vec3 lightDir = (vec3){0.0f, 0.0f, -1.0f};
+vec3 lightPos = (vec3){0.0f, 0.0f, -1.0f};
+
+void setCameraPos(const float x, const float y, const float z){
+	cameraPos = (vec3){x, y, z};
+}
+void setLightPos(const float x, const float y, const float z){
+	lightPos = (vec3){x, y, z};
+}
 
 vec3 cross(const vec3 v1, const vec3 v2){
 	const vec3 ret = {solveMatrix2(v1.y, v1.z, v2.y, v2.z), -1.0f * solveMatrix2(v1.x, v1.z, v2.x, v2.z), solveMatrix2(v1.x, v1.y, v2.x, v2.y)};
@@ -59,6 +66,41 @@ static inline vec3 subVec3(vec3 v1, const vec3 v2){
 	return v1;
 }
 
+static inline vec3 addVec3(vec3 v1, const vec3 v2){
+	v1.x += v2.x;
+	v1.y += v2.y;
+	v1.z += v2.z;
+	return v1;
+}
+
+static inline vec3 scaleVec3(vec3 v1, const float scl){
+	v1.x *= scl;
+	v1.y *= scl;
+	v1.z *= scl;
+	return v1;
+}
+
+static inline float invsqrt(float f){
+	// dumbass compiler strict alias must be avoided
+	*(__attribute((may_alias)) uint32_t*)(&f) = 0x5f3759dfu - (*(__attribute((may_alias)) uint32_t*)(&f) >> 1);
+	f = f * (1.5f - 0.5f * f * f * f);
+	return f;
+}
+
+vec3 normalize(vec3 v){
+	const float sq = invsqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+	v.x = v.x * sq; v.y = v.y * sq; v.z = v.z * sq;
+	return v;
+}
+
+static inline float magnitude(vec3 v){
+	return 1.0f/invsqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+typedef struct{
+	vec3 origin, direction;
+}ray;
+
 uint16_t backdrop = 0;
 
 typedef struct{
@@ -88,6 +130,37 @@ static inline void resetBufs(){
 		zTileBuf[x] = 3e30f;
 		colorTileBuf[x] = backdrop;
 	}
+}
+
+static inline uint8_t hitTriangle(const ray r, const uint32_t idx){
+	float f = dot3(r.direction, triangles[idx].normal);
+	if (f > -0.001 && f < 0.001) { // check if the plane and ray are paralell enough to be ignored
+		return 0;
+	}
+	vec3 temp_sub = subVec3(triangles[idx].p1, r.origin);
+	temp_sub = scaleVec3(r.direction, dot3(triangles[idx].normal, temp_sub) / f);// fast division since fastmath doesnt work on my system for some reason
+	vec3 intersect = addVec3(temp_sub, r.origin);
+	const vec3 v2 = subVec3(intersect, triangles[idx].p1);
+	const float dot02 = dot3(triangles[idx].sub_p2p1, v2);
+	const float dot12 = dot3(triangles[idx].sub_p3p1, v2);
+	if (triangles[idx].disc2 == 0.0f) { return 0; }
+	const float fdiv = 1.0f / triangles[idx].disc2;
+
+	const float u = triangles[idx].dot3131 * dot02 - triangles[idx].dot2131 * dot12 * fdiv;
+
+	const float v = triangles[idx].dot2121 * dot12 - triangles[idx].dot2131 * dot02 * fdiv;
+	if ((u < 0) || (v < 0) || (u + v > 1) || dot3(temp_sub, r.direction) < 0.0f) { return 0; }
+	return 1;
+}
+
+static inline uint8_t checkIfShadow(const ray r){
+	for(uint32_t t = 0; t < trianglesDefined; t++){
+		if(hitTriangle(r, t)){
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
 void addTriangle(const triangle t){
@@ -239,23 +312,6 @@ static inline vec2 barycentricInterpolCorner(triangle2 t){
 	return (vec2){(t.y2_y3 * t.min.x + t.x3_x2 * t.min.y), (t.y3_y1 * t.min.x + t.x1_x3 * t.min.y)};
 }
 
-static inline float invsqrt(float f){
-	// dumbass compiler strict alias must be avoided
-	*(__attribute((may_alias)) uint32_t*)(&f) = 0x5f3759dfu - (*(__attribute((may_alias)) uint32_t*)(&f) >> 1);
-	f = f * (1.5f - 0.5f * f * f * f);
-	return f;
-}
-
-vec3 normalize(vec3 v){
-	const float sq = invsqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-	v.x = v.x * sq; v.y = v.y * sq; v.z = v.z * sq;
-	return v;
-}
-
-static inline float magnitude(vec3 v){
-	return 1.0f/invsqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-}
-
 static inline vec2 projectPoint(const vec3 p){
 	// assume camera rotation is 0, 0, 1. doing anything else would be REALLY slow computationally
 	vec3 v = subVec3(p, cameraPos);
@@ -273,6 +329,13 @@ void projectTriangle(const uint32_t idx){
 	ret.x1_x3 = (ret.p1.x - ret.p3.x) * ret.denom;
 	ret.x3_x2 = (ret.p3.x - ret.p2.x) * ret.denom;
 	ret.y3_y1 = (ret.p3.y - ret.p1.y) * ret.denom;
+	triangles[idx].sub_p2p1 = subVec3(triangles[idx].p2, triangles[idx].p1);
+	triangles[idx].sub_p3p1 = subVec3(triangles[idx].p3, triangles[idx].p1);
+	triangles[idx].dot2121 = dot3(triangles[idx].sub_p2p1, triangles[idx].sub_p2p1);
+	triangles[idx].dot3131 = dot3(triangles[idx].sub_p3p1, triangles[idx].sub_p3p1);
+	triangles[idx].dot2131 = dot3(triangles[idx].sub_p3p1, triangles[idx].sub_p2p1);
+	triangles[idx].disc2 = triangles[idx].dot2121 * triangles[idx].dot3131 - triangles[idx].dot2131 * triangles[idx].dot2131;
+	triangles[idx].center = scaleVec3(addVec3(addVec3(triangles[idx].p1, triangles[idx].p2), triangles[idx].p3), 1.0f/3);
 	trianglesProjected[idx] = ret;
 }
 
@@ -290,17 +353,24 @@ void computeNormal(const uint32_t idx){
 }
 
 static inline float flatShade(const uint32_t idx){
+	const vec3 lightDir = normalize(subVec3(triangles[idx].center, lightPos));
 	float dt = dot3(triangles[idx].normal, lightDir);
 	dt *= (dt < 0.0f) ? -1.0f : 1.0f;
 	const float trueBright = ambient + dt;
 	return trueBright > 1.0f ? 1.0f : trueBright;
 }
 
+static inline float flatShadeShadows(const uint32_t idx, const vec3 barycentricReturn, const float z, const float fsTrue){
+	const vec3 pos = (vec3){triangles[idx].p1.x * barycentricReturn.x + triangles[idx].p2.x * barycentricReturn.y + triangles[idx].p3.x * barycentricReturn.z,
+		triangles[idx].p1.y * barycentricReturn.x + triangles[idx].p2.y * barycentricReturn.y + triangles[idx].p3.y * barycentricReturn.z, z};
+	const ray r = (ray){pos, subVec3(lightPos, pos)};
+	return checkIfShadow(r) ? ambient : fsTrue;
+}
+
 static inline void renderTriangle(const uint32_t idx){
 
 	// compiler prob optimizes fine just gotta make sure, otherwise this makes no sense
 	register triangle2 t = trianglesProjected[idx];
-
 	const float lightCoef = flatShade(idx);
 
 	const uint16_t lox = (curTile % 2) ? 120 : 0;
@@ -352,7 +422,14 @@ static inline void renderTriangle(const uint32_t idx){
 				const float tmpz = alpha * triangles[idx].p1.z + beta * triangles[idx].p2.z + gamma * triangles[idx].p3.z;
 
 				if(tmpz <= zTileBuf[tidx]){
+					#ifdef FLAT_SHADE_SHADOWS
+					// flat shading w/ sharp shadows
+					colorTileBuf[tidx] = scaleColor(triangles[idx].color, flatShadeShadows(idx, (vec3){alpha, beta, gamma}, tmpz, lightCoef));
+					#endif
+					#ifdef FLAT_SHADE
+					// simple flat shading
 					colorTileBuf[tidx] = scaleColor(triangles[idx].color, lightCoef);
+					#endif
 					zTileBuf[tidx] = tmpz;
 				}
 			}
