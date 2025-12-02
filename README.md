@@ -5,16 +5,16 @@ A tiny, self‑contained software rasterizer for Cortex‑M4F microcontrollers w
 ---
 
 ## Overview
-- **Self contained** — the renderer requires **no external headers**; drop the source into your project and compile.  
-- **Target platform** — Cortex‑M4F with hardware FPU needed.
+- **Self contained** — the renderer requires no external headers; drop the source into your project and compile.  
+- **Target platform** — Cortex M4F with hardware FPU needed.
 
 ---
 
 ## Requirements
-- **RAM**: **≥ 100 KB** of SRAM or PSRAM available at runtime.  
+- **RAM**: **≥ 100 KB** of SRAM or PSRAM available.  
 - **Display bus**: The LCD drivers are made for the Elegoo 2.8 in. TFT LCD. You can find a wiring guide in my operating system repository.
 - **Triangle budget**: example loaders and models are kept modest — **≤ 100 triangles** per model to stay within memory limits.
-
+- **compiled with GCC**
 ---
 
 ## Features
