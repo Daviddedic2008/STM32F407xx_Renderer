@@ -17,7 +17,6 @@ void loadCube(const uint16_t color) {
     triangle t;
     t.color = color;
     t.raytracedStrength = 0;
-
     const float half = 100.0f;
     const float cx = 0.0f, cy = 200.0f, cz = 200.0f;
 

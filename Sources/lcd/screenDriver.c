@@ -133,12 +133,14 @@ static inline void resetBufs(){
 	}
 }
 
-static inline uint8_t hitTriangle(const ray r, const uint32_t idx){
+static inline uint8_t hitTriangle(ray r, const uint32_t idx){
 	float f = dot3(r.direction, triangles[idx].normal);
 	if (f > -0.001 && f < 0.001) { // check if the plane and ray are paralell enough to be ignored
 		return 0;
 	}
 	vec3 temp_sub = subVec3(triangles[idx].p1, r.origin);
+	const float t = dot3(triangles[idx].normal, temp_sub) / f;
+	if(t <= 0.0f){ return 0; }
 	temp_sub = scaleVec3(r.direction, dot3(triangles[idx].normal, temp_sub) / f);// fast division since fastmath doesnt work on my system for some reason
 	vec3 intersect = addVec3(temp_sub, r.origin);
 	const vec3 v2 = subVec3(intersect, triangles[idx].p1);
@@ -150,13 +152,12 @@ static inline uint8_t hitTriangle(const ray r, const uint32_t idx){
 	const float u = (triangles[idx].dot3131 * dot02 - triangles[idx].dot2131 * dot12) * fdiv;
 
 	const float v = (triangles[idx].dot2121 * dot12 - triangles[idx].dot2131 * dot02) * fdiv;
-	if ((u < 0) || (v < 0) || (u + v > 1) || dot3(temp_sub, r.direction) < 0.01f) { return 0; }
+	if ((u < 0) || (v < 0) || (u + v > 1)) { return 0; }
 	return 1;
 }
 
-static inline uint8_t checkIfShadow(const ray r, const uint32_t avoid){
+static inline uint8_t checkIfShadow(ray r, const uint32_t avoid){
 	for(uint32_t t = 0; t < trianglesDefined; t++){
-		if(t == avoid){continue;}
 		if(hitTriangle(r, t)){
 			return 1;
 		}
@@ -324,7 +325,7 @@ static inline vec2 projectPoint(const vec3 p){
 static inline vec3 unprojectPoint(const int16_t x, const int16_t y, const float z){
 	// reverse projected point assuming camera dir is {0, 0, 1}
 	const float t = z / fov;
-	return addVec3((vec2){(x - 120) * t, (y - 120) * t}, cameraPos);
+	return addVec3((vec3){(x - 120) * t, (y - 120) * t, z}, cameraPos);
 }
 
 void projectTriangle(const uint32_t idx){
@@ -430,7 +431,7 @@ static inline void renderTriangle(const uint32_t idx){
 				if(tmpz <= zTileBuf[tidx]){
 					#ifdef FLAT_SHADE_SHADOWS
 					// flat shading w/ sharp shadows
-					colorTileBuf[tidx] = scaleColor(triangles[idx].color, flatShadeShadows(idx, x-120, y-120, tmpz, lightCoef));
+					colorTileBuf[tidx] = scaleColor(triangles[idx].color, flatShadeShadows(idx, (int16_t)x, (int16_t)y, tmpz, lightCoef));
 					#endif
 					#ifdef FLAT_SHADE
 					// simple flat shading

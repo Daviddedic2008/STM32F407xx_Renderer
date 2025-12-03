@@ -45,10 +45,11 @@ int main(void)
 	//projectTriangle(1);
 	//triangles[0].color = 0xFF;
 	//triangles[1].color = 0x00FF;
+
 	loadCube(0xF800);     // red cube
 	loadPyramid(0x07E0);  // green pyramid
 	loadColumn(0x001F);   // blue column
-	setLightPos(-50.0f, 0.0f, -0.0f);
+	setLightPos(400.0f, 200.0f, 0.0f);
 	clearLCD();
 	renderTriangles();
 	projectAllTriangles();
