@@ -14,8 +14,8 @@
 // macros to change render mode
 // uncomment the one you wish to use
 
-#define FLAT_SHADE
-//#define FLAT_SHADE_SHADOWS
+//#define FLAT_SHADE
+#define FLAT_SHADE_SHADOWS
 
 
 

@@ -40,6 +40,9 @@ A tiny, self‑contained software rasterizer for Cortex‑M4F microcontrollers w
 
 # DEMOS!!!
 
+---
+
+## These two demos are rendering a red box, hollow blue prism, and yellow pyramid.
 
 https://github.com/user-attachments/assets/8e711835-2d67-47a4-a9c1-9b1e0dfb6262
 

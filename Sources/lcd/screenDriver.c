@@ -14,6 +14,7 @@ unsigned char row = 0; unsigned char col = 0; unsigned char pr = 0; unsigned cha
 
 vec3 cameraPos = (vec3){0.0f, 0.0f, 0.0f};
 vec3 lightPos = (vec3){0.0f, 0.0f, -1.0f};
+vec3 lightDir = (vec3){0, 0, -1};
 
 void setCameraPos(const float x, const float y, const float z){
 	cameraPos = (vec3){x, y, z};
@@ -146,15 +147,16 @@ static inline uint8_t hitTriangle(const ray r, const uint32_t idx){
 	if (triangles[idx].disc2 == 0.0f) { return 0; }
 	const float fdiv = 1.0f / triangles[idx].disc2;
 
-	const float u = triangles[idx].dot3131 * dot02 - triangles[idx].dot2131 * dot12 * fdiv;
+	const float u = (triangles[idx].dot3131 * dot02 - triangles[idx].dot2131 * dot12) * fdiv;
 
-	const float v = triangles[idx].dot2121 * dot12 - triangles[idx].dot2131 * dot02 * fdiv;
-	if ((u < 0) || (v < 0) || (u + v > 1) || dot3(temp_sub, r.direction) < 0.0f) { return 0; }
+	const float v = (triangles[idx].dot2121 * dot12 - triangles[idx].dot2131 * dot02) * fdiv;
+	if ((u < 0) || (v < 0) || (u + v > 1) || dot3(temp_sub, r.direction) < 0.01f) { return 0; }
 	return 1;
 }
 
-static inline uint8_t checkIfShadow(const ray r){
+static inline uint8_t checkIfShadow(const ray r, const uint32_t avoid){
 	for(uint32_t t = 0; t < trianglesDefined; t++){
+		if(t == avoid){continue;}
 		if(hitTriangle(r, t)){
 			return 1;
 		}
@@ -313,10 +315,16 @@ static inline vec2 barycentricInterpolCorner(triangle2 t){
 }
 
 static inline vec2 projectPoint(const vec3 p){
-	// assume camera rotation is 0, 0, 1. doing anything else would be REALLY slow computationally
+	// assume camera direction is {0, 0, 1}. doing anything else would be REALLY slow computationally
 	vec3 v = subVec3(p, cameraPos);
 	float invz = 1.0f / v.z;
 	return (vec2){120 + v.x * invz * fov, 120 + v.y * invz * fov};
+}
+
+static inline vec3 unprojectPoint(const int16_t x, const int16_t y, const float z){
+	// reverse projected point assuming camera dir is {0, 0, 1}
+	const float t = z / fov;
+	return addVec3((vec2){(x - 120) * t, (y - 120) * t}, cameraPos);
 }
 
 void projectTriangle(const uint32_t idx){
@@ -348,23 +356,21 @@ static inline uint16_t scaleColor(uint16_t clr, const float scl){
 }
 
 void computeNormal(const uint32_t idx){
-	const vec3* vecs = (vec3*)&triangles[idx];
-	triangles[idx].normal = normalize(cross((vec3){vecs[0].x - vecs[1].x, vecs[0].y - vecs[1].y, vecs[0].z - vecs[1].z}, (vec3){vecs[0].x - vecs[2].x, vecs[0].y - vecs[2].y, vecs[0].z - vecs[2].z}));
+	triangles[idx].normal = normalize(cross(subVec3(triangles[idx].p1, triangles[idx].p2), subVec3(triangles[idx].p1, triangles[idx].p3)));
 }
 
 static inline float flatShade(const uint32_t idx){
-	const vec3 lightDir = normalize(subVec3(triangles[idx].center, lightPos));
-	float dt = dot3(triangles[idx].normal, lightDir);
-	dt *= (dt < 0.0f) ? -1.0f : 1.0f;
-	const float trueBright = ambient + dt;
+	//dt *= (dt < 0.0f) ? -1.0f : 1.0f;
+	float trueBright = ambient + dot3(triangles[idx].normal, lightDir);
+	trueBright = trueBright > 1.0f ? 1.0f : trueBright;
+	trueBright = trueBright < ambient ? ambient : trueBright;
 	return trueBright > 1.0f ? 1.0f : trueBright;
 }
 
-static inline float flatShadeShadows(const uint32_t idx, const vec3 barycentricReturn, const float z, const float fsTrue){
-	const vec3 pos = (vec3){triangles[idx].p1.x * barycentricReturn.x + triangles[idx].p2.x * barycentricReturn.y + triangles[idx].p3.x * barycentricReturn.z,
-		triangles[idx].p1.y * barycentricReturn.x + triangles[idx].p2.y * barycentricReturn.y + triangles[idx].p3.y * barycentricReturn.z, z};
-	const ray r = (ray){pos, subVec3(lightPos, pos)};
-	return checkIfShadow(r) ? ambient : fsTrue;
+static inline float flatShadeShadows(const uint32_t idx, const int16_t x, const int16_t y, const float z, const float fsTrue){
+	const vec3 pos = unprojectPoint(x, y, z);
+	const ray r = (ray){pos, normalize(subVec3(lightPos, pos))};
+	return checkIfShadow(r, idx) ? 0.1f : fsTrue;
 }
 
 static inline void renderTriangle(const uint32_t idx){
@@ -424,7 +430,7 @@ static inline void renderTriangle(const uint32_t idx){
 				if(tmpz <= zTileBuf[tidx]){
 					#ifdef FLAT_SHADE_SHADOWS
 					// flat shading w/ sharp shadows
-					colorTileBuf[tidx] = scaleColor(triangles[idx].color, flatShadeShadows(idx, (vec3){alpha, beta, gamma}, tmpz, lightCoef));
+					colorTileBuf[tidx] = scaleColor(triangles[idx].color, flatShadeShadows(idx, x-120, y-120, tmpz, lightCoef));
 					#endif
 					#ifdef FLAT_SHADE
 					// simple flat shading
