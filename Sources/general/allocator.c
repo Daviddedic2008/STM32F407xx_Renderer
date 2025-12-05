@@ -7,8 +7,8 @@
 
 #include <stdint.h>
 
-#define MAX_WORDS           15000
-#define MAX_ALLOCATIONS     30
+#define MAX_WORDS           1
+#define MAX_ALLOCATIONS     1
 #define INVALID_SLOT        0xFFFFFFFF
 
 static uint32_t heap[MAX_WORDS];

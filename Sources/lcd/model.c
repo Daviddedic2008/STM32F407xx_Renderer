@@ -46,12 +46,12 @@ void loadCube(const uint16_t color) {
     t.p1.x = cx - half; t.p1.y = cy - half; t.p1.z = cz - half;
     t.p2.x = cx + half; t.p2.y = cy - half; t.p2.z = cz - half;
     t.p3.x = cx + half; t.p3.y = cy - half; t.p3.z = cz + half;
-    t.normal.x = 0.0f; t.normal.y = 1.0f; t.normal.z = 0.0f; addTriangle(t);
+    t.normal.x = 0.0f; t.normal.y = -1.0f; t.normal.z = 0.0f; addTriangle(t);
 
     t.p1.x = cx - half; t.p1.y = cy - half; t.p1.z = cz - half;
     t.p2.x = cx + half; t.p2.y = cy - half; t.p2.z = cz + half;
     t.p3.x = cx - half; t.p3.y = cy - half; t.p3.z = cz + half;
-    t.normal.x = 0.0f; t.normal.y = 1.0f; t.normal.z = 0.0f; addTriangle(t);
+    t.normal.x = 0.0f; t.normal.y = -1.0f; t.normal.z = 0.0f; addTriangle(t);
 
     // Top (+Y)
     t.p1.x = cx - half; t.p1.y = cy + half; t.p1.z = cz - half;
