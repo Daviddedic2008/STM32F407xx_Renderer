@@ -31,9 +31,8 @@ int main(void)
 	SystemInit();
 	pinout();
 	LCD_INIT();
-	changeBackdrop(0xFFFF);
-	clearLCD_FULL();
 	changeBackdrop(0x0000);
+	clearLCD_FULL();
 	//changeBackdrop(0xf000);
 	//changeBackdrop(0x0);
 	//triangle t;
@@ -49,7 +48,6 @@ int main(void)
 	loadCube(0xF800);     // red cube
 	loadPyramid(0x07E0);  // green pyramid
 	loadColumn(0x001F);   // blue column
-	setLightPos(400.0f, 200.0f, 0.0f);
 	clearLCD();
 	renderTriangles();
 	projectAllTriangles();

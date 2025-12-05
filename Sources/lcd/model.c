@@ -46,12 +46,12 @@ void loadCube(const uint16_t color) {
     t.p1.x = cx - half; t.p1.y = cy - half; t.p1.z = cz - half;
     t.p2.x = cx + half; t.p2.y = cy - half; t.p2.z = cz - half;
     t.p3.x = cx + half; t.p3.y = cy - half; t.p3.z = cz + half;
-    t.normal.x = 0.0f; t.normal.y = -1.0f; t.normal.z = 0.0f; addTriangle(t);
+    t.normal.x = 0.0f; t.normal.y = 1.0f; t.normal.z = 0.0f; addTriangle(t);
 
     t.p1.x = cx - half; t.p1.y = cy - half; t.p1.z = cz - half;
     t.p2.x = cx + half; t.p2.y = cy - half; t.p2.z = cz + half;
     t.p3.x = cx - half; t.p3.y = cy - half; t.p3.z = cz + half;
-    t.normal.x = 0.0f; t.normal.y = -1.0f; t.normal.z = 0.0f; addTriangle(t);
+    t.normal.x = 0.0f; t.normal.y = 1.0f; t.normal.z = 0.0f; addTriangle(t);
 
     // Top (+Y)
     t.p1.x = cx - half; t.p1.y = cy + half; t.p1.z = cz - half;
@@ -186,6 +186,17 @@ void loadColumn(const uint16_t color) {
     t.p2.x = cx + halfX; t.p2.y = cy + halfY; t.p2.z = cz + halfZ;
     t.p3.x = cx + halfX; t.p3.y = cy - halfY; t.p3.z = cz + halfZ;
     t.normal.x = 1.0f; t.normal.y = 0.0f; t.normal.z = 0.0f; addTriangle(t);
+
+    // Top (+Y)
+    t.p1.x = cx - halfX; t.p1.y = cy - halfY; t.p1.z = cz - halfZ;
+    t.p2.x = cx + halfX; t.p2.y = cy - halfY; t.p2.z = cz - halfZ;
+    t.p3.x = cx + halfX; t.p3.y = cy - halfY; t.p3.z = cz + halfZ;
+    t.normal.x = 0.0f; t.normal.y = 1.0f; t.normal.z = 0.0f; addTriangle(t);
+
+    t.p1.x = cx - halfX; t.p1.y = cy - halfY; t.p1.z = cz - halfZ;
+    t.p2.x = cx + halfX; t.p2.y = cy - halfY; t.p2.z = cz + halfZ;
+    t.p3.x = cx - halfX; t.p3.y = cy - halfY; t.p3.z = cz + halfZ;
+    t.normal.x = 0.0f; t.normal.y = 1.0f; t.normal.z = 0.0f; addTriangle(t);
 }
 
 // Ground plane square centered at (0,-150,200), side = 400 -> 2 triangles

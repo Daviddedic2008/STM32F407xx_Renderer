@@ -36,6 +36,7 @@ A tiny, self‑contained software rasterizer for Cortex‑M4F microcontrollers w
 - **Triangles in RAM now**; Planned migration to flash to reduce RAM pressure and allow larger models.
 - **Phong Model**; This shading model is a lot nicer than the one I'm currently using(flat shading).
 - **Incorporate a Raytracer**; I am currently in the process of adding raytraced shadows.
+- **Organize code**; Most of this was written after midnight. I quickly stopped writing readable code.
 
 
 # DEMOS!!!

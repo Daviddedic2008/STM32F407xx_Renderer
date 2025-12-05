@@ -14,7 +14,7 @@ unsigned char row = 0; unsigned char col = 0; unsigned char pr = 0; unsigned cha
 
 vec3 cameraPos = (vec3){0.0f, 0.0f, 0.0f};
 vec3 lightPos = (vec3){0.0f, 0.0f, -1.0f};
-vec3 lightDir = (vec3){0, 0, -1};
+vec3 lightDir = (vec3){-0.1, 0.2, -1};
 
 void setCameraPos(const float x, const float y, const float z){
 	cameraPos = (vec3){x, y, z};
@@ -117,12 +117,23 @@ typedef struct{
 uint32_t trianglesDefined = 0;
 triangle triangles[maxTriangles];
 triangle2 trianglesProjected[maxTriangles]; // more ram used, but dont recalc values unless triangle is moving
+
+triangle2 trianglesProjectedLight[maxTriangles];
+float trianglesProjectedLightZ[maxTriangles * 3];
+
 uint8_t curTile = 0; // 4 tile system
+
 
 
 uint16_t colorTileBuf[120*120];
 
 float zTileBuf[120*120];
+
+float zLightBuf[120 * 120];
+
+vec3 lightPlaneU, lightPlaneV;
+float minU = -3e30f, maxU = 3e30f, minV = -3e30f, maxV = 3e30f;
+float scale;
 
 #define tileBufIdx(x, y) ((x) + (y) * 120)
 
@@ -138,9 +149,10 @@ static inline uint8_t hitTriangle(ray r, const uint32_t idx){
 	if (f > -0.001 && f < 0.001) { // check if the plane and ray are paralell enough to be ignored
 		return 0;
 	}
+	r.origin = addVec3(r.origin, scaleVec3(triangles[idx].normal, 0.05f));
 	vec3 temp_sub = subVec3(triangles[idx].p1, r.origin);
 	const float t = dot3(triangles[idx].normal, temp_sub) / f;
-	if(t <= 0.0f){ return 0; }
+	if(t <= 0.01f){ return 0; }
 	temp_sub = scaleVec3(r.direction, dot3(triangles[idx].normal, temp_sub) / f);// fast division since fastmath doesnt work on my system for some reason
 	vec3 intersect = addVec3(temp_sub, r.origin);
 	const vec3 v2 = subVec3(intersect, triangles[idx].p1);
@@ -156,7 +168,7 @@ static inline uint8_t hitTriangle(ray r, const uint32_t idx){
 	return 1;
 }
 
-static inline uint8_t checkIfShadow(ray r, const uint32_t avoid){
+static inline uint8_t checkIfShadowRay(ray r, const uint32_t avoid){
 	for(uint32_t t = 0; t < trianglesDefined; t++){
 		if(hitTriangle(r, t)){
 			return 1;
@@ -328,6 +340,86 @@ static inline vec3 unprojectPoint(const int16_t x, const int16_t y, const float 
 	return addVec3((vec3){(x - 120) * t, (y - 120) * t, z}, cameraPos);
 }
 
+static inline vec2 projectPointLightPlane(const uint32_t idx){
+    vec3 p = ((vec3*)(&triangles[idx / 3]))[idx % 3];
+    vec3 toPoint = subVec3(p, lightPos);
+
+    float zDepth = dot3(toPoint, lightDir);
+    trianglesProjectedLightZ[idx] = zDepth;
+
+    return (vec2){ dot3(toPoint, lightPlaneU), dot3(toPoint, lightPlaneV) };
+}
+static inline void calculateLightPlane(){
+	lightPlaneU = normalize(cross((vec3){0.0f, 1.0f, 0.0f}, lightDir));
+	lightPlaneV = normalize(cross(lightDir, lightPlaneU));
+	minU = 3e30f; maxU = -3e30f; minV = 3e30f; maxV = -3e30f;
+	for(uint32_t t = 0; t < trianglesDefined; t++){
+		for(uint8_t p = 0; p < 3; p++){
+			((vec3*)&(trianglesProjectedLight[t]))[p] = projectPointLightPlane(t * 3 + p);
+			if(((vec3*)&(trianglesProjectedLight[t]))[p].x < minU){minU = ((vec3*)&(trianglesProjectedLight[t]))[p].x;}
+			else if(((vec3*)&(trianglesProjectedLight[t]))[p].x > maxU){maxU = ((vec3*)&(trianglesProjectedLight[t]))[p].x;}
+			if(((vec3*)&(trianglesProjectedLight[t]))[p].y < minV){minV = ((vec3*)&(trianglesProjectedLight[t]))[p].y;}
+			else if(((vec3*)&(trianglesProjectedLight[t]))[p].y > maxV){maxV = ((vec3*)&(trianglesProjectedLight[t]))[p].y;}
+		}
+	}
+
+	const float sclU = 120.0f / (maxU - minU);
+	const float sclV = 120.0f / (maxV - minV);
+	scale = (sclV < sclU) ? sclV : sclU;
+
+	for(uint32_t t = 0; t < trianglesDefined; t++){
+		register triangle2 ret = trianglesProjectedLight[t];
+		ret.p1.x -= minU; ret.p1.y -= minV;
+		ret.p2.x -= minU; ret.p2.y -= minV;
+		ret.p3.x -= minU; ret.p3.y -= minV;
+		ret.p1.x *= scale; ret.p1.y *= scale;
+		ret.p2.x *= scale; ret.p2.y *= scale;
+		ret.p3.x *= scale; ret.p3.y *= scale;
+		ret.min = (vec2){fmin3(ret.p1.x, ret.p2.x, ret.p3.x), fmin3(ret.p1.y, ret.p2.y, ret.p3.y)};
+		ret.max = (vec2){fmax3(ret.p1.x, ret.p2.x, ret.p3.x), fmax3(ret.p1.y, ret.p2.y, ret.p3.y)};
+		ret.denom = 1.0f/((ret.p2.y - ret.p3.y) * (ret.p1.x - ret.p3.x) + (ret.p3.x - ret.p2.x) * (ret.p1.y - ret.p3.y));
+		ret.y2_y3 = (ret.p2.y - ret.p3.y) * ret.denom;
+		ret.x1_x3 = (ret.p1.x - ret.p3.x) * ret.denom;
+		ret.x3_x2 = (ret.p3.x - ret.p2.x) * ret.denom;
+		ret.y3_y1 = (ret.p3.y - ret.p1.y) * ret.denom;
+		// calc constants in light plane space
+		trianglesProjectedLight[t] = ret;
+	}
+
+	//const vec2 centerPlane = (vec2){(maxU + minU)/2, (maxV + minV)/2};
+}
+
+void zBufTriangleLight(const uint32_t idx){
+	register triangle2 t = trianglesProjectedLight[idx];
+
+	vec2 initialUV = barycentricInterpolCorner(t);
+	// da(x) y2_y3
+	// db(x) y3_y1
+	// da(y) x3_x2
+	// db(y) x1_x3
+	for(uint32_t y = t.min.y; y <= t.max.y; y++){
+		float alpha = initialUV.x;
+		float beta = initialUV.y;
+		for(uint32_t x = t.min.x; x <= t.max.x; x++){
+			const uint32_t bufIdx = tileBufIdx(x, y);
+			float gamma = 1.0f - alpha - beta; // last barycentric coord
+			if(alpha > -0.01f && beta > -0.01f && gamma > -0.01f){
+				// inside
+				const float tmpz = alpha * trianglesProjectedLightZ[idx * 3] + beta * trianglesProjectedLightZ[idx * 3 + 1] + gamma * trianglesProjectedLightZ[idx * 3 + 2];
+
+				if(tmpz <= zLightBuf[bufIdx]){
+					zLightBuf[bufIdx] = tmpz;
+				}
+			}
+			alpha += t.y2_y3;
+			beta += t.y3_y1;
+		}
+		initialUV.x += t.x3_x2;
+		initialUV.y += t.x1_x3;
+	}
+
+}
+
 void projectTriangle(const uint32_t idx){
 	triangle2 ret;
 	ret.p1 = projectPoint(triangles[idx].p1); ret.p2 = projectPoint(triangles[idx].p2); ret.p3 = projectPoint(triangles[idx].p3);
@@ -338,6 +430,7 @@ void projectTriangle(const uint32_t idx){
 	ret.x1_x3 = (ret.p1.x - ret.p3.x) * ret.denom;
 	ret.x3_x2 = (ret.p3.x - ret.p2.x) * ret.denom;
 	ret.y3_y1 = (ret.p3.y - ret.p1.y) * ret.denom;
+#ifdef FLAT_SHADE_SHADOWS
 	triangles[idx].sub_p2p1 = subVec3(triangles[idx].p2, triangles[idx].p1);
 	triangles[idx].sub_p3p1 = subVec3(triangles[idx].p3, triangles[idx].p1);
 	triangles[idx].dot2121 = dot3(triangles[idx].sub_p2p1, triangles[idx].sub_p2p1);
@@ -345,6 +438,7 @@ void projectTriangle(const uint32_t idx){
 	triangles[idx].dot2131 = dot3(triangles[idx].sub_p3p1, triangles[idx].sub_p2p1);
 	triangles[idx].disc2 = triangles[idx].dot2121 * triangles[idx].dot3131 - triangles[idx].dot2131 * triangles[idx].dot2131;
 	triangles[idx].center = scaleVec3(addVec3(addVec3(triangles[idx].p1, triangles[idx].p2), triangles[idx].p3), 1.0f/3);
+#endif
 	trianglesProjected[idx] = ret;
 }
 
@@ -371,7 +465,7 @@ static inline float flatShade(const uint32_t idx){
 static inline float flatShadeShadows(const uint32_t idx, const int16_t x, const int16_t y, const float z, const float fsTrue){
 	const vec3 pos = unprojectPoint(x, y, z);
 	const ray r = (ray){pos, normalize(subVec3(lightPos, pos))};
-	return checkIfShadow(r, idx) ? 0.1f : fsTrue;
+	return checkIfShadowRay(r, idx) ? 0.1f : fsTrue;
 }
 
 static inline void renderTriangle(const uint32_t idx){

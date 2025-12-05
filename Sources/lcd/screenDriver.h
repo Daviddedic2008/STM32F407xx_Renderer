@@ -14,8 +14,9 @@
 // macros to change render mode
 // uncomment the one you wish to use
 
-//#define FLAT_SHADE
-#define FLAT_SHADE_SHADOWS
+#define FLAT_SHADE
+//#define WILLIAMS_SHADOWS
+//#define FLAT_SHADE_SHADOWS
 
 
 
@@ -27,9 +28,9 @@ void changeBackdrop(const uint16_t c);
 extern uint8_t underline;
 extern char screenBuf[30][40];
 
-#define maxTriangles 128
+#define maxTriangles 30
 #define fov 75.0f
-#define ambient 0.5f // ambient light strength
+#define ambient 0.3f // ambient light strength
 
 typedef struct{
 	float x, y, z;
